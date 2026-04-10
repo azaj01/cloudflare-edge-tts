@@ -264,6 +264,29 @@ describe("worker routes", () => {
     });
   });
 
+  it("rejects tts requests with an empty voice string", async () => {
+    const response = await dispatch(
+      new IncomingRequest("https://example.com/tts", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text: "hello world",
+          voice: "",
+        }),
+      })
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "INVALID_REQUEST",
+        message: "voice must be a non-empty string",
+      },
+    });
+  });
+
   it("returns upstream error when tts synthesis fails before streaming starts", async () => {
     createAudioStreamMock.mockRejectedValueOnce(new Error("upstream failed"));
 

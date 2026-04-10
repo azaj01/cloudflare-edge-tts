@@ -12,9 +12,6 @@
     "typecheck": "tsc --noEmit",
     "deploy": "wrangler deploy"
   },
-  "dependencies": {
-    "edge-tts-universal": "1.4.0"
-  },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.14.3",
     "typescript": "5.9.2",

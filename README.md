@@ -1,6 +1,6 @@
 # cloudflare-edge-tts
 
-Minimal Cloudflare Worker that exposes Microsoft Edge Text-to-Speech over HTTP using `edge-tts-universal@1.4.0`.
+Minimal Cloudflare Worker that exposes Microsoft Edge Text-to-Speech over HTTP using a Worker-native implementation built on `fetch(..., { Upgrade: "websocket" })`.
 
 ## Endpoints
 
@@ -29,7 +29,7 @@ Returns the available Edge TTS voices:
 }
 ```
 
-The `voices` payload includes `ShortName` values. This Worker's default voice uses the more specific provider voice string `zh-CN-Xiaoxiao:DragonHDFlashLatestNeural`, so callers may choose to pass either an upstream-compatible provider voice string or a discovered voice value that the upstream library accepts.
+The `voices` payload includes `ShortName` values. This Worker's default voice remains `zh-CN-Xiaoxiao:DragonHDFlashLatestNeural`, but the Worker resolves that provider-specific alias to a compatible Xiaoxiao Edge TTS voice before synthesis. Callers may pass either a discovered `ShortName` or the default provider voice alias.
 
 ### `POST /tts`
 
@@ -50,6 +50,7 @@ Validation and error behavior:
 
 - Requires `Content-Type: application/json`
 - Requires a non-empty string `text`
+- Rejects empty `voice` strings
 - Returns `502` when the upstream TTS request fails before the audio response starts, for example before or while priming the first chunk
 
 ## Setup
@@ -115,13 +116,13 @@ Use the actual URL printed by Wrangler if it differs from `http://127.0.0.1:8787
 In another terminal, run the smoke test:
 
 ```bash
-curl -i --max-time 10 http://127.0.0.1:8787/health
-curl -sS --max-time 10 \
+curl -i --max-time 20 http://127.0.0.1:8787/health
+curl -sS --max-time 20 \
   -D /tmp/cloudflare-edge-tts-voices.headers \
   http://127.0.0.1:8787/voices \
   --output /tmp/cloudflare-edge-tts-voices.json && \
   awk 'NR==1 { print $2 }' /tmp/cloudflare-edge-tts-voices.headers
-curl -sS --max-time 10 \
+curl -sS --max-time 30 \
   -D /tmp/cloudflare-edge-tts-tts.headers \
   -H 'Content-Type: application/json' \
   http://127.0.0.1:8787/tts \
@@ -147,9 +148,9 @@ Deploy the Worker:
 npm run deploy
 ```
 
-## Dependency Note
+## Implementation Note
 
-This project depends on `edge-tts-universal@1.4.0`, which is licensed under the AGPL. Review that license before using this Worker in environments with distribution or network-service obligations.
+This Worker does not rely on `edge-tts-universal` at runtime. It performs the voice-list fetch and WebSocket synthesis handshake directly inside the Worker runtime.
 
 ## Notes
 
@@ -158,8 +159,8 @@ Observed remote validation result on 2026-04-10 with `wrangler 4.81.1`:
 - `npx wrangler whoami` succeeded
 - The authenticated Cloudflare account context used for the run was `1f1d1678a2413a54c944b3081bab5c84`
 - `npm run dev` started `wrangler dev --remote`, uploaded a remote preview, and reported `Ready on http://localhost:8787`
-- `curl -i --max-time 10 http://127.0.0.1:8787/health` failed with `curl: (28) Operation timed out after 10005 milliseconds with 0 bytes received`
-- The `/voices` smoke test timed out with `curl: (28) Operation timed out after 10004 milliseconds with 0 bytes received`, so no HTTP status was printed and no usable `/tmp/cloudflare-edge-tts-voices.headers` or `/tmp/cloudflare-edge-tts-voices.json` artifact was produced for confirming `ShortName` entries
-- The `/tts` smoke test timed out with `curl: (28) Operation timed out after 10004 milliseconds with 0 bytes received`, so no HTTP status was printed and no usable `/tmp/cloudflare-edge-tts-tts.headers` or `/tmp/cloudflare-edge-tts-tts.body` artifact was produced to distinguish `200 audio/mpeg` success from a JSON/HTTP failure
+- `curl -i --max-time 20 http://127.0.0.1:8787/health` returned `200 OK`
+- The `/voices` smoke test returned `200`, produced `/tmp/cloudflare-edge-tts-voices.headers`, and wrote a JSON payload containing `ShortName` entries to `/tmp/cloudflare-edge-tts-voices.json`
+- The `/tts` smoke test returned `200`, produced `/tmp/cloudflare-edge-tts-tts.headers`, and wrote an `audio/mpeg` body to `/tmp/cloudflare-edge-tts-tts.body`
 
-This means the real validation via `wrangler dev --remote` did not succeed in this environment. The localhost remote-preview proxy accepted TCP connections but did not return any HTTP response bytes for `/health`, `/voices`, or `/tts`, so the Worker could not be verified successfully against the real Cloudflare runtime from this run.
+This means the current Worker-native implementation was verified successfully against both `wrangler dev --local` and `wrangler dev --remote` in this environment.

@@ -22,13 +22,19 @@ function parseBody(body: unknown) {
     throw new Error("text is required");
   }
 
-  if (voice !== undefined && typeof voice !== "string") {
-    throw new Error("voice must be a string");
+  if (voice !== undefined) {
+    if (typeof voice !== "string") {
+      throw new Error("voice must be a string");
+    }
+
+    if (voice.trim().length === 0) {
+      throw new Error("voice must be a non-empty string");
+    }
   }
 
   return {
     text: text.trim(),
-    voice,
+    voice: typeof voice === "string" ? voice.trim() : voice,
   };
 }
 
